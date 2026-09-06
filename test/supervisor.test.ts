@@ -130,11 +130,14 @@ describe("Supervisor", () => {
         });
 
         it("resolves instances from instances.yaml", () => {
+            // absolute (including the drive on Windows) and outside of the data root: used as-is
+            const garage = path.resolve(dataRoot, "..", "garage");
+
             yaml.writeIfChanged(path.join(dataRoot, INSTANCES_FILE), {
                 frontend: {port: 8099, url: "http://z2m.local:8099/"},
                 instances: [
                     {name: "living_room", data_dir: "living_room"},
-                    {name: "garage", data_dir: "/mnt/garage"},
+                    {name: "garage", data_dir: garage},
                 ],
             });
 
@@ -142,7 +145,7 @@ describe("Supervisor", () => {
                 frontend: {port: 8099, url: "http://z2m.local:8099/"},
                 instances: [
                     {name: "living_room", dataPath: path.join(dataRoot, "living_room")},
-                    {name: "garage", dataPath: path.resolve("/mnt/garage")},
+                    {name: "garage", dataPath: garage},
                 ],
             });
 
