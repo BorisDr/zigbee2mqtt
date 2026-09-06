@@ -2,6 +2,7 @@ import assert from "node:assert";
 import bind from "bind-decorator";
 import type * as zhc from "zigbee-herdsman-converters";
 import type {Zh} from "zigbee-herdsman-converters/lib/types";
+import {getInstanceContext} from "../util/instanceContext";
 import logger from "../util/logger";
 import * as settings from "../util/settings";
 import {stringify} from "../util/stringify";
@@ -2157,11 +2158,13 @@ export class HomeAssistant extends Extension {
             sw_version: `Zigbee2MQTT ${this.zigbee2MQTTVersion}`,
         };
 
-        const url = settings.get().frontend?.url ?? "";
+        const instance = getInstanceContext();
+        const url = instance?.frontendUrl ?? settings.get().frontend?.url ?? "";
         // Since zigbee2mqtt-windfront support multiple instances the configuration URL contains the
-        // instance ID. Since we don't know which instance it is we always point to 0.
+        // instance ID. In multi-coordinator mode this is the index of the instance in the combined frontend,
+        // otherwise we don't know which instance it is and always point to 0.
         // https://github.com/Koenkk/zigbee2mqtt/issues/28936
-        const urlEntityPostfix = settings.get().frontend.package === "zigbee2mqtt-windfront" ? "0/" : "";
+        const urlEntityPostfix = instance ? `${instance.index}/` : settings.get().frontend.package === "zigbee2mqtt-windfront" ? "0/" : "";
         if (entity.isDevice()) {
             assert(entity.definition, `Cannot 'getDevicePayload' for unsupported device`);
             payload.model = entity.definition.description;

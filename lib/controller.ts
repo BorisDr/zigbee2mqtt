@@ -20,6 +20,7 @@ import ExtensionReceive from "./extension/receive";
 import Mqtt, {type MqttPublishOptions} from "./mqtt";
 import State from "./state";
 import type {Zigbee2MQTTAPI} from "./types/api";
+import {getInstanceContext} from "./util/instanceContext";
 import logger from "./util/logger";
 import {initSdNotify} from "./util/sd-notify";
 import * as settings from "./util/settings";
@@ -90,7 +91,8 @@ export class Controller {
         this.#startAbortController = new AbortController();
         const abortSignal = this.#startAbortController.signal;
 
-        if (settings.get().frontend.enabled) {
+        // in multi-coordinator mode the frontend is always attached to the combined frontend of the supervisor
+        if (getInstanceContext()?.frontendPort || settings.get().frontend.enabled) {
             const {Frontend} = await import("./extension/frontend.js");
 
             this.extensions.add(new Frontend(...this.extensionArgs));

@@ -5,6 +5,8 @@ process.setSourceMapsEnabled(true);
 
 /** @type {import("./dist/controller").Controller | undefined} */
 let controller;
+/** @type {import("./dist/supervisor").Supervisor | undefined} */
+let supervisor;
 let stopping = false;
 let watchdogCount = 0;
 let unsolicitedStop = false;
@@ -125,6 +127,39 @@ async function checkDist() {
     }
 }
 
+/**
+ * Multi-coordinator mode: one instance (worker thread with its own data directory) per coordinator, and a combined frontend.
+ * @type {(config: import("./dist/supervisor").InstancesConfig) => Promise<void>}
+ */
+async function startSupervisor(config) {
+    const {Supervisor, preflight} = await import("./dist/supervisor.js");
+    const timestamp = () => {
+        const date = new Date();
+
+        // offset UTC by current timezone (same format as the logger of the instances)
+        return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace("T", " ");
+    };
+    const logger = {
+        info: (message) => console.log(`[${timestamp()}] info: \t[supervisor] ${message}`),
+        warning: (message) => console.warn(`[${timestamp()}] warning: \t[supervisor] ${message}`),
+        error: (message) => console.error(`[${timestamp()}] error: \t[supervisor] ${message}`),
+    };
+
+    try {
+        preflight(config, logger);
+
+        supervisor = new Supervisor(config, logger, process.env.Z2M_WATCHDOG != null ? watchdogDelays : undefined, (code) => {
+            supervisor = undefined;
+            process.exit(code);
+        });
+
+        await supervisor.start();
+    } catch (error) {
+        logger.error(`Failed to start: ${error.message}`);
+        process.exit(1);
+    }
+}
+
 /** @type {() => Promise<void>} */
 async function start() {
     console.log(`Starting Zigbee2MQTT ${process.env.Z2M_WATCHDOG != null ? `with watchdog (${watchdogDelays})` : "without watchdog"}.`);
@@ -138,6 +173,13 @@ async function start() {
 
         if (!satisfies(process.version, version)) {
             console.log(`\t\tZigbee2MQTT requires node version ${version}, you are running ${process.version}!\n`);
+        }
+
+        const {resolveInstances} = await import("./dist/supervisor.js");
+        const instances = resolveInstances();
+
+        if (instances) {
+            return await startSupervisor(instances);
         }
 
         const {onboard} = await import("./dist/util/onboarding.js");
@@ -165,13 +207,19 @@ async function stop(restart, signal = undefined) {
     // `handleQuit` or `restart` never unsolicited
     unsolicitedStop = false;
 
+    if (supervisor) {
+        await supervisor.stop(signal);
+        supervisor = undefined;
+        process.exit(0);
+    }
+
     await controller?.stop(restart, undefined, signal);
 }
 
 /** @type {(signal: NodeJS.Signals) => Promise<void>} */
 async function handleQuit(signal) {
     if (!stopping) {
-        if (controller) {
+        if (controller || supervisor) {
             stopping = true;
 
             await stop(false, signal);

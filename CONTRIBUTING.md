@@ -7,7 +7,7 @@ Everybody is invited and welcomed to contribute to Zigbee2MQTT.
 Zigbee2MQTT is written in TypeScript.
 It uses [zigbee-herdsman](https://github.com/koenkk/zigbee-herdsman) for communication with the adapter/coordinator and [zigbee-herdsman-converters](https://github.com/koenkk/zigbee-herdsman-converters) to provide device-specific definitions.
 
-- Pull requests are always created against the [**dev**](https://github.com/Koenkk/zigbee2mqtt/tree/dev) branch.
+- Pull requests are always created against the [**dev**](https://github.com/BorisDr/zigbee2mqtt/tree/dev) branch.
 - Easiest way to start developing Zigbee2MQTT is by setting up a development environment (a.k.a. bare-metal installation). You can follow this [guide](https://www.zigbee2mqtt.io/guide/installation/01_linux.html) to do this.
 - You can run the tests locally by executing `pnpm test`. Zigbee2MQTT enforces 100% code coverage, in case you add new code check if your code is covered by running `pnpm run test:coverage`. The coverage report can be found under `coverage/lcov-report/index.html`.
 - Linting & formatting is also enforced and can be run with `pnpm run check` (can use `pnpm run check:w` to fix small issues automatically).

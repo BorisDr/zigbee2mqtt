@@ -7,10 +7,12 @@ import {type EventHandler, flushPromises} from "../mocks/utils";
 import {devices, events as mockZHEvents} from "../mocks/zigbeeHerdsman";
 
 import path from "node:path";
+import type {MessagePort} from "node:worker_threads";
 import {stringify} from "../../lib/util/stringify";
 import type {Mock} from "vitest";
 import ws from "ws";
 import {Controller} from "../../lib/controller";
+import {type InstanceToHubMessage, setInstanceContext} from "../../lib/util/instanceContext";
 import * as settings from "../../lib/util/settings";
 
 const mockRedirectResponse = {
@@ -495,5 +497,83 @@ describe("Extension: Frontend", () => {
         expect(mockWSClient.terminate).toHaveBeenCalledTimes(1);
         expect(mockHTTP.close).toHaveBeenCalledTimes(0);
         expect(mockWS.close).toHaveBeenCalledTimes(1);
+    });
+
+    describe("combined frontend (multi-coordinator mode)", () => {
+        const hubPortEvents: Record<string, EventHandler> = {};
+        const mockHubPort = {
+            on: vi.fn((event: string, handler: EventHandler): void => {
+                hubPortEvents[event] = handler;
+            }),
+            off: vi.fn(),
+            postMessage: vi.fn<(message: InstanceToHubMessage) => void>(),
+        };
+        const postedMessages = (): InstanceToHubMessage[] => mockHubPort.postMessage.mock.calls.map(([message]) => message);
+
+        beforeEach(() => {
+            // per-instance frontend settings are irrelevant, the supervisor serves the UI
+            settings.set(["frontend"], {enabled: false});
+            setInstanceContext({name: "garage", index: 1, frontendPort: mockHubPort as unknown as MessagePort});
+            mockHubPort.on.mockClear();
+            mockHubPort.off.mockClear();
+            mockHubPort.postMessage.mockClear();
+            vi.mocked(ws.Server).mockClear();
+        });
+
+        afterEach(() => {
+            setInstanceContext(undefined);
+        });
+
+        it("bridges browsers of the combined frontend to MQTT", async () => {
+            controller = new Controller(vi.fn(), vi.fn());
+            await controller.start();
+
+            expect(ws.Server).not.toHaveBeenCalled();
+            expect(mockHTTP.listen).not.toHaveBeenCalled();
+            expect(mockHubPort.on).toHaveBeenCalledWith("message", expect.any(Function));
+
+            // nothing is posted while no browser is connected
+            await mockZHEvents.deviceJoined({device: devices.bulb});
+            await flushPromises();
+            expect(mockHubPort.postMessage).not.toHaveBeenCalled();
+
+            // browser connects: retained messages and device states are sent to that browser only
+            hubPortEvents.message({type: "open", id: 7});
+            const initial = postedMessages();
+            expect(initial.every((message) => message.type === "send" && message.id === 7)).toStrictEqual(true);
+            const initialTopics = initial.map((message) => JSON.parse((message as {data: string}).data).topic);
+            expect(initialTopics).toContain("bridge/devices");
+            expect(initialTopics).toContain("bridge/info");
+            expect(initial).toContainEqual({type: "send", id: 7, data: stringify({topic: "bridge/state", payload: {state: "online"}})});
+            expect(initial).toContainEqual({type: "send", id: 7, data: stringify({topic: "remote", payload: {brightness: 255}})});
+
+            // browser message is injected as MQTT message
+            mockMQTTPublishAsync.mockClear();
+            mockHubPort.postMessage.mockClear();
+            hubPortEvents.message({type: "message", id: 7, data: stringify({topic: "bulb_color/set", payload: {state: "ON"}})});
+            await flushPromises();
+            expect(mockMQTTPublishAsync).toHaveBeenCalledTimes(1);
+            expect(mockMQTTPublishAsync).toHaveBeenCalledWith("zigbee2mqtt/bulb_color", expect.stringContaining('"state":"ON"'), {
+                retain: false,
+                qos: 0,
+            });
+
+            // resulting state is broadcast to all browsers of this instance
+            expect(postedMessages()).toContainEqual({type: "broadcast", data: expect.stringContaining('"topic":"bulb_color"')});
+
+            // messages from unknown (closed) browsers are ignored
+            mockMQTTPublishAsync.mockClear();
+            hubPortEvents.message({type: "close", id: 7});
+            hubPortEvents.message({type: "message", id: 7, data: stringify({topic: "bulb_color/set", payload: {state: "OFF"}})});
+            hubPortEvents.message({type: "message", id: 99, data: stringify({topic: "bulb_color/set", payload: {state: "OFF"}})});
+            await flushPromises();
+            expect(mockMQTTPublishAsync).not.toHaveBeenCalled();
+
+            // stop: browsers are told the instance is offline and closed
+            mockHubPort.postMessage.mockClear();
+            await controller.stop();
+            expect(mockHubPort.off).toHaveBeenCalledWith("message", expect.any(Function));
+            expect(postedMessages()).toStrictEqual([{type: "closeAll", data: stringify({topic: "bridge/state", payload: {state: "offline"}})}]);
+        });
     });
 });
