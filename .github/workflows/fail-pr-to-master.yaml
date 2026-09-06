@@ -12,9 +12,12 @@ jobs:
             - name: Fail PR to master
               env:
                   PR_TITLE: ${{ github.event.pull_request.title }}
+                  PR_HEAD: ${{ github.head_ref }}
               run: |
                   if [[ "$PR_TITLE" == "chore(dev): release"* ]]; then
                     echo "PR title starts with 'chore(dev): release', allowing PR"
+                  elif [[ "$PR_HEAD" == "dev" ]]; then
+                    echo "PR promotes the dev branch to master, allowing PR"
                   else
                     echo "Pull requests to the master branch are not allowed, target dev branch"
                     exit 1

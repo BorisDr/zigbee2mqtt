@@ -405,6 +405,16 @@ describe("Extension: Availability", () => {
         let called = 0;
         let lastCalled = 0;
 
+        // deterministic jitter spread over the `max_jitter` window (with `Math.random()` all pings could randomly land
+        // in the first seconds and break the "not everything pinged yet" checks below)
+        const jitters = [0.1, 0.4, 0.7, 0.2, 0.9, 0.5, 0.3];
+        let jitterIndex = 0;
+        const randomSpy = vi.spyOn(Math, "random").mockImplementation(() => jitters[jitterIndex++ % jitters.length]);
+
+        // re-arm the timers with the mocked jitter
+        await resetExtension();
+        for (const key in devices) devices[key as keyof typeof devices].ping.mockClear();
+
         await setTimeAndAdvanceTimers(utils.minutes(10));
 
         for (const p of devicesPings) {
@@ -454,6 +464,8 @@ describe("Extension: Availability", () => {
         for (const p of devicesPings) {
             expect(p).toHaveBeenCalledTimes(1);
         }
+
+        randomSpy.mockRestore();
     });
 
     it("does not trigger backoff on ping success", async () => {
