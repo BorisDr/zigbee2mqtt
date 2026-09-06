@@ -1,0 +1,29 @@
+# Multi-coordinator mode: run several Zigbee coordinators from a single Zigbee2MQTT process.
+#
+# Copy this file to `<data directory>/instances.yaml` (the directory pointed to by ZIGBEE2MQTT_DATA, `data/` by default).
+# When this file exists, Zigbee2MQTT starts one isolated instance per entry below (each in its own worker thread with
+# its own data directory: configuration.yaml, database.db, state.json, log/, device_icons/, external_*/...) and serves a
+# single combined frontend showing all of them.
+#
+# Each instance needs its own `configuration.yaml` with at least a distinct `serial.port` and `mqtt.base_topic`
+# (and `mqtt.client_id` when set). Create them by running Zigbee2MQTT once per instance in regular mode, e.g.
+# `ZIGBEE2MQTT_DATA=/path/to/data/living_room pnpm start`, or copy `configuration.example.yaml` and edit it.
+# The `frontend` section of the instances' `configuration.yaml` is ignored in this mode.
+
+# Combined frontend (all keys optional, shown with their defaults unless noted).
+frontend:
+    port: 8080
+    # host: 0.0.0.0             # or a unix socket path (starts with `/`)
+    # base_url: /
+    # auth_token: secret        # asked by the frontend for every instance
+    # ssl_key: /etc/ssl/z2m.key
+    # ssl_cert: /etc/ssl/z2m.crt
+    # url: http://z2m.local:8080  # public URL, used for the Home Assistant device `configuration_url`
+
+instances:
+    # `name` is used in the URL of the instance (`<base_url>/<name>/api`) and as prefix of its console log lines.
+    # `data_dir` is resolved relative to the directory containing this file.
+    - name: living_room
+      data_dir: living_room
+    - name: garage
+      data_dir: /mnt/zigbee/garage

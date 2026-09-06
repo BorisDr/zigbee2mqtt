@@ -5,9 +5,11 @@ import {createServer} from "node:http";
 import {createServer as createSecureServer} from "node:https";
 import type {Socket} from "node:net";
 import {posix} from "node:path";
+import type {MessagePort} from "node:worker_threads";
 import bind from "bind-decorator";
 import WebSocket from "ws";
 import data from "../util/data";
+import {getInstanceContext, type HubToInstanceMessage, type InstanceToHubMessage} from "../util/instanceContext";
 import logger from "../util/logger";
 import * as settings from "../util/settings";
 import {createStaticFileServer, sendNotFound} from "../util/staticFileServer";
@@ -16,13 +18,20 @@ import utils from "../util/utils";
 import Extension from "./extension";
 
 /**
- * This extension servers the frontend
+ * This extension servers the frontend.
+ *
+ * In multi-coordinator mode the UI is served by the supervisor (combined frontend for all coordinators), and this
+ * extension only bridges the browser connections handed over through a `MessagePort` to the MQTT layer of this instance.
  */
 export class Frontend extends Extension {
     private mqttBaseTopic: string;
     private server: Server | undefined;
-    private wss!: WebSocket.Server;
+    private wss: WebSocket.Server | undefined;
     private baseUrl: string;
+    /** Channel to the combined frontend, only set in multi-coordinator mode. */
+    private hubPort: MessagePort | undefined;
+    /** Browser connections currently open through the combined frontend. */
+    private hubClients = new Set<number>();
 
     constructor(
         zigbee: Zigbee,
@@ -37,13 +46,17 @@ export class Frontend extends Extension {
         super(zigbee, mqtt, state, publishEntityState, eventBus, enableDisableExtension, restartCallback, addExtension);
 
         const frontendSettings = settings.get().frontend;
-        assert(frontendSettings.enabled, `Frontend extension created with setting 'enabled: false'`);
+        this.hubPort = getInstanceContext()?.frontendPort;
+        assert(this.hubPort || frontendSettings.enabled, `Frontend extension created with setting 'enabled: false'`);
         this.baseUrl = frontendSettings.base_url;
         this.mqttBaseTopic = settings.get().mqtt.base_topic;
     }
 
     override async start(): Promise<void> {
-        if (settings.get().frontend.disable_ui_serving) {
+        if (this.hubPort) {
+            this.hubPort.on("message", this.onHubMessage);
+            logger.info("Frontend attached to the combined frontend of the supervisor");
+        } else if (settings.get().frontend.disable_ui_serving) {
             const {host, port} = settings.get().frontend;
             this.wss = new WebSocket.Server({port, host, path: posix.join(this.baseUrl, "api")});
 
@@ -123,7 +136,7 @@ export class Frontend extends Extension {
             this.wss = new WebSocket.Server({noServer: true, path: posix.join(this.baseUrl, "api")});
         }
 
-        this.wss.on("connection", this.onWebSocketConnection);
+        this.wss?.on("connection", this.onWebSocketConnection);
 
         this.eventBus.onMQTTMessagePublished(this, this.onMQTTPublishMessageOrEntityState);
         this.eventBus.onPublishEntityState(this, this.onMQTTPublishMessageOrEntityState);
@@ -132,9 +145,17 @@ export class Frontend extends Extension {
     override async stop(): Promise<void> {
         await super.stop();
 
+        const offline = stringify({topic: "bridge/state", payload: {state: "offline"}});
+
+        if (this.hubPort) {
+            this.hubPort.off("message", this.onHubMessage);
+            this.postToHub({type: "closeAll", data: offline});
+            this.hubClients.clear();
+        }
+
         if (this.wss) {
             for (const client of this.wss.clients) {
-                client.send(stringify({topic: "bridge/state", payload: {state: "offline"}}));
+                client.send(offline);
                 client.terminate();
             }
 
@@ -144,33 +165,42 @@ export class Frontend extends Extension {
         await new Promise((resolve) => (this.server ? this.server.close(resolve) : resolve(undefined)));
     }
 
-    @bind private onUpgrade(request: IncomingMessage, socket: Socket, head: Buffer): void {
-        this.wss.handleUpgrade(request, socket, head, (ws) => {
-            // biome-ignore lint/style/noNonNullAssertion: `Only valid for request obtained from Server`
-            const {searchParams} = new URL(request.url!, "http://localhost"); // dummy base, may not be absolute
-            const authToken = settings.get().frontend.auth_token;
-
-            if (!authToken || authToken === searchParams.get("token")) {
-                this.wss.emit("connection", ws, request);
-            } else {
-                ws.close(4401, "Unauthorized");
-            }
-        });
+    private postToHub(message: InstanceToHubMessage): void {
+        // biome-ignore lint/style/noNonNullAssertion: only called when attached to the hub
+        this.hubPort!.postMessage(message);
     }
 
-    @bind private onWebSocketConnection(ws: WebSocket): void {
-        ws.on("error", (msg) => logger.error(`WebSocket error: ${msg.message}`));
-        ws.on("message", (data: Buffer, isBinary: boolean) => {
-            if (!isBinary && data) {
-                const message = data.toString();
-                const {topic, payload} = JSON.parse(message);
-                this.mqtt.onMessage(`${this.mqttBaseTopic}/${topic}`, Buffer.from(stringify(payload)));
+    @bind private onHubMessage(message: HubToInstanceMessage): void {
+        switch (message.type) {
+            case "open": {
+                this.hubClients.add(message.id);
+                this.sendInitialState((data) => this.postToHub({type: "send", id: message.id, data}));
+                break;
             }
-        });
+            case "message": {
+                if (this.hubClients.has(message.id)) {
+                    this.onClientMessage(message.data);
+                }
+                break;
+            }
+            case "close": {
+                this.hubClients.delete(message.id);
+                break;
+            }
+        }
+    }
 
+    /** Message received from a browser: `{topic, payload}` relative to the base topic, injected as MQTT message. */
+    private onClientMessage(message: string): void {
+        const {topic, payload} = JSON.parse(message);
+        this.mqtt.onMessage(`${this.mqttBaseTopic}/${topic}`, Buffer.from(stringify(payload)));
+    }
+
+    /** Sends retained messages and the current state of all devices to a newly connected browser. */
+    private sendInitialState(send: (data: string) => void): void {
         for (const [topic, payload] of Object.entries(this.mqtt.retainedMessages)) {
             if (topic.startsWith(`${this.mqttBaseTopic}/`)) {
-                ws.send(
+                send(
                     stringify({
                         // Send topic without base_topic
                         topic: topic.substring(this.mqttBaseTopic.length + 1),
@@ -192,8 +222,36 @@ export class Frontend extends Extension {
                 payload.linkquality = device.zh.linkquality;
             }
 
-            ws.send(stringify({topic: device.name, payload}));
+            send(stringify({topic: device.name, payload}));
         }
+    }
+
+    @bind private onUpgrade(request: IncomingMessage, socket: Socket, head: Buffer): void {
+        // biome-ignore lint/style/noNonNullAssertion: only registered when serving the UI, `wss` is always created then
+        const wss = this.wss!;
+
+        wss.handleUpgrade(request, socket, head, (ws) => {
+            // biome-ignore lint/style/noNonNullAssertion: `Only valid for request obtained from Server`
+            const {searchParams} = new URL(request.url!, "http://localhost"); // dummy base, may not be absolute
+            const authToken = settings.get().frontend.auth_token;
+
+            if (!authToken || authToken === searchParams.get("token")) {
+                wss.emit("connection", ws, request);
+            } else {
+                ws.close(4401, "Unauthorized");
+            }
+        });
+    }
+
+    @bind private onWebSocketConnection(ws: WebSocket): void {
+        ws.on("error", (msg) => logger.error(`WebSocket error: ${msg.message}`));
+        ws.on("message", (data: Buffer, isBinary: boolean) => {
+            if (!isBinary && data) {
+                this.onClientMessage(data.toString());
+            }
+        });
+
+        this.sendInitialState((data) => ws.send(data));
     }
 
     @bind private onMQTTPublishMessageOrEntityState(data: eventdata.MQTTMessagePublished | eventdata.PublishEntityState): void {
@@ -218,9 +276,17 @@ export class Frontend extends Extension {
             payload = data.message;
         }
 
-        for (const client of this.wss.clients) {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(stringify({topic, payload}));
+        const message = stringify({topic, payload});
+
+        if (this.hubPort && this.hubClients.size > 0) {
+            this.postToHub({type: "broadcast", data: message});
+        }
+
+        if (this.wss) {
+            for (const client of this.wss.clients) {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(message);
+                }
             }
         }
     }

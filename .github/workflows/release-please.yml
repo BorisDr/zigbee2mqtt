@@ -33,11 +33,11 @@ jobs:
             # Checkout repos
             - uses: actions/checkout@v7
               with:
-                  repository: koenkk/zigbee2mqtt
+                  repository: BorisDr/zigbee2mqtt
                   path: ./z2m
             - uses: actions/checkout@v7
               with:
-                  repository: koenkk/zigbee2mqtt
+                  repository: BorisDr/zigbee2mqtt
                   path: ./z2m-master
                   ref: master
 
@@ -55,7 +55,7 @@ jobs:
                   MASTER_ZH_VERSION=$(cat z2m-master/package.json | jq -r '.dependencies."zigbee-herdsman"')
                   MASTER_FRONTEND_VERSION=$(cat z2m-master/package.json | jq -r '.dependencies."zigbee2mqtt-frontend"')
                   MASTER_WINDFRONT_VERSION=$(cat z2m-master/package.json | jq -r '.dependencies."zigbee2mqtt-windfront"')
-                  wget -q -O - https://raw.githubusercontent.com/Koenkk/zigbee2mqtt/release-please--branches--dev--components--zigbee2mqtt/CHANGELOG.md > z2m/CHANGELOG.md
+                  wget -q -O - https://raw.githubusercontent.com/BorisDr/zigbee2mqtt/release-please--branches--dev--components--zigbee2mqtt/CHANGELOG.md > z2m/CHANGELOG.md
                   cd z2m
                   pnpm i --frozen-lockfile
                   node scripts/generateChangelog.mjs $MASTER_Z2M_VERSION $MASTER_ZHC_VERSION $MASTER_ZH_VERSION $MASTER_FRONTEND_VERSION $MASTER_WINDFRONT_VERSION >> ../changelog.md

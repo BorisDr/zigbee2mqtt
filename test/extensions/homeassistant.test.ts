@@ -18,6 +18,7 @@ import HomeAssistant from "../../lib/extension/homeassistant";
 
 import type Device from "../../lib/model/device";
 import type Group from "../../lib/model/group";
+import {setInstanceContext} from "../../lib/util/instanceContext";
 import * as settings from "../../lib/util/settings";
 
 const mocksClear = [mockMQTTPublishAsync, mockLogger.debug, mockLogger.warning, mockLogger.error];
@@ -3075,6 +3076,32 @@ describe("Extension: HomeAssistant", () => {
             qos: 1,
         });
     });
+
+    it.each([
+        // In multi-coordinator mode the URL of the combined frontend and the index of the instance are used.
+        ["http://combined.frontend", "http://combined.frontend/#/device/2/0x0017880104e45522/info"],
+        [undefined, "http://zigbee.mqtt/#/device/2/0x0017880104e45522/info"],
+    ])(
+        "Should discover devices with configuration url of the combined frontend (%s)",
+        async (frontendUrl: string | undefined, expectedUrl: string) => {
+            settings.set(["frontend", "url"], "http://zigbee.mqtt");
+            setInstanceContext({name: "garage", index: 2, frontendUrl});
+
+            try {
+                await resetExtension();
+                await flushPromises();
+            } finally {
+                setInstanceContext(undefined);
+            }
+
+            const discovered = mockMQTTPublishAsync.mock.calls.find(
+                ([topic]) => topic === "homeassistant/sensor/0x0017880104e45522/temperature/config",
+            );
+
+            expect(discovered).toBeDefined();
+            expect(JSON.parse(discovered?.[1] as string).device.configuration_url).toStrictEqual(expectedUrl);
+        },
+    );
 
     it.each([
         // Windfront includes the instance ID in the URL.
