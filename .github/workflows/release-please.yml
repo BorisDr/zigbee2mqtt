@@ -30,18 +30,23 @@ jobs:
                   target-branch: dev
                   token: ${{secrets.GH_TOKEN}}
 
+            # Dev branch changelog gist: only maintained when the `CHANGELOG_GIST_ID` repository variable points to a gist
+            # owned by the account behind `GH_TOKEN`.
             # Checkout repos
             - uses: actions/checkout@v7
+              if: vars.CHANGELOG_GIST_ID != ''
               with:
-                  repository: koenkk/zigbee2mqtt
+                  repository: BorisDr/zigbee2mqtt
                   path: ./z2m
             - uses: actions/checkout@v7
+              if: vars.CHANGELOG_GIST_ID != ''
               with:
-                  repository: koenkk/zigbee2mqtt
+                  repository: BorisDr/zigbee2mqtt
                   path: ./z2m-master
                   ref: master
 
             - name: Restore cache commit-user-lookup.json
+              if: vars.CHANGELOG_GIST_ID != ''
               uses: actions/cache/restore@v6
               with:
                   path: z2m/scripts/commit-user-lookup.json
@@ -49,26 +54,29 @@ jobs:
                   restore-keys: |
                       commit-user-lookup-
             - name: Generate changelog
+              if: vars.CHANGELOG_GIST_ID != ''
               run: |
                   MASTER_Z2M_VERSION=$(cat z2m-master/package.json | jq -r '.version')
                   MASTER_ZHC_VERSION=$(cat z2m-master/package.json | jq -r '.dependencies."zigbee-herdsman-converters"')
                   MASTER_ZH_VERSION=$(cat z2m-master/package.json | jq -r '.dependencies."zigbee-herdsman"')
                   MASTER_FRONTEND_VERSION=$(cat z2m-master/package.json | jq -r '.dependencies."zigbee2mqtt-frontend"')
                   MASTER_WINDFRONT_VERSION=$(cat z2m-master/package.json | jq -r '.dependencies."zigbee2mqtt-windfront"')
-                  wget -q -O - https://raw.githubusercontent.com/Koenkk/zigbee2mqtt/release-please--branches--dev--components--zigbee2mqtt/CHANGELOG.md > z2m/CHANGELOG.md
+                  wget -q -O - https://raw.githubusercontent.com/BorisDr/zigbee2mqtt/release-please--branches--dev--components--zigbee2mqtt/CHANGELOG.md > z2m/CHANGELOG.md
                   cd z2m
                   pnpm i --frozen-lockfile
                   node scripts/generateChangelog.mjs $MASTER_Z2M_VERSION $MASTER_ZHC_VERSION $MASTER_ZH_VERSION $MASTER_FRONTEND_VERSION $MASTER_WINDFRONT_VERSION >> ../changelog.md
               env:
                   GH_TOKEN: ${{secrets.GH_TOKEN}}
             - name: Update changelog gist
+              if: vars.CHANGELOG_GIST_ID != ''
               run: |
-                  gh gist edit bfd4c3d1725a2cccacc11d6ba51008ba -a changelog.md
+                  gh gist edit "$CHANGELOG_GIST_ID" -a changelog.md
               env:
                   GH_TOKEN: ${{secrets.GH_TOKEN}}
+                  CHANGELOG_GIST_ID: ${{ vars.CHANGELOG_GIST_ID }}
             - name: Save cache commit-user-lookup.json
               uses: actions/cache/save@v6
-              if: always()
+              if: always() && vars.CHANGELOG_GIST_ID != ''
               with:
                   path: z2m/scripts/commit-user-lookup.json
                   key: commit-user-lookup-${{ hashFiles('z2m/scripts/commit-user-lookup.json') }}

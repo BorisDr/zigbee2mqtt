@@ -2,6 +2,7 @@ import assert from "node:assert";
 import bind from "bind-decorator";
 import type * as zhc from "zigbee-herdsman-converters";
 import type {Zh} from "zigbee-herdsman-converters/lib/types";
+import {getInstanceContext} from "../util/instanceContext";
 import logger from "../util/logger";
 import * as settings from "../util/settings";
 import {stringify} from "../util/stringify";
@@ -141,7 +142,7 @@ const NUMERIC_DISCOVERY_LOOKUP: {[s: string]: KeyValue} = {
     alarm_temperature_min: {device_class: "temperature", entity_category: "config", icon: "mdi:thermometer-low"},
     angle: {icon: "angle-acute"},
     angle_axis: {icon: "angle-acute"},
-    apparent_temperature: {device_class: "temperature", icon: "mdi:thermometer-lines", preserve_name: true, state_class: "measurement"},
+    apparent_temperature: {device_class: "temperature", icon: "mdi:thermometer-lines", state_class: "measurement"},
     aqi: {device_class: "aqi", state_class: "measurement"},
     auto_relock_time: {entity_category: "config", icon: "mdi:timer"},
     away_preset_days: {entity_category: "config", icon: "mdi:timer"},
@@ -195,7 +196,7 @@ const NUMERIC_DISCOVERY_LOOKUP: {[s: string]: KeyValue} = {
         entity_category: "diagnostic",
         state_class: "measurement",
     },
-    dew_point: {device_class: "temperature", icon: "mdi:thermometer-water", preserve_name: true, state_class: "measurement"},
+    dew_point: {device_class: "temperature", icon: "mdi:thermometer-water", state_class: "measurement"},
     distance: {device_class: "distance", state_class: "measurement"},
     duration: {entity_category: "config", icon: "mdi:timer"},
     eco2: {device_class: "volatile_organic_compounds_parts", state_class: "measurement"},
@@ -213,12 +214,13 @@ const NUMERIC_DISCOVERY_LOOKUP: {[s: string]: KeyValue} = {
     formaldehyd: {state_class: "measurement"},
     formaldehyde: {state_class: "measurement"},
     flow: {device_class: "volume_flow_rate", state_class: "measurement"},
+    frequency: {device_class: "frequency", state_class: "measurement"},
     gas: {device_class: "gas", state_class: "total_increasing", icon: "mdi:meter-gas"},
     gas_density: {icon: "mdi:google-circles-communities", state_class: "measurement"},
-    gust_speed: {device_class: "wind_speed", icon: "mdi:weather-windy-variant", preserve_name: true, state_class: "measurement"},
+    gust_speed: {device_class: "wind_speed", icon: "mdi:weather-windy-variant", state_class: "measurement"},
     hcho: {icon: "mdi:air-filter", state_class: "measurement"},
     heat_stress: {icon: "mdi:weather-sunny-alert", state_class: "measurement"},
-    humidex: {device_class: "temperature", icon: "mdi:thermometer-alert", preserve_name: true, state_class: "measurement"},
+    humidex: {device_class: "temperature", icon: "mdi:thermometer-alert", state_class: "measurement"},
     humidity: {device_class: "humidity", state_class: "measurement"},
     humidity_calibration: {entity_category: "config", icon: "mdi:wrench-clock"},
     humidity_max: {entity_category: "config", icon: "mdi:water-percent"},
@@ -318,7 +320,7 @@ const NUMERIC_DISCOVERY_LOOKUP: {[s: string]: KeyValue} = {
         device_class: "water",
         state_class: "total_increasing",
     },
-    wind_chill: {device_class: "temperature", icon: "mdi:snowflake-thermometer", preserve_name: true, state_class: "measurement"},
+    wind_chill: {device_class: "temperature", icon: "mdi:snowflake-thermometer", state_class: "measurement"},
     wind_direction: {icon: "mdi:compass-outline", state_class: "measurement"},
     wind_speed: {device_class: "wind_speed", icon: "mdi:weather-windy", state_class: "measurement"},
     x: {icon: "mdi:axis-x-arrow", state_class: "measurement"},
@@ -395,6 +397,8 @@ const featurePropertyWithoutEndpoint = (feature: zhc.Feature): string => {
 
     return feature.property;
 };
+
+const cleanName = (name: string): string => name.replace(/^(?:analog_in_|analog_out_)/, "");
 
 const applyHomeAssistantExposeMetadata = (payload: DiscoveryEntry, homeAssistant: zhc.Expose["homeassistant"]): void => {
     if (!homeAssistant) {
@@ -1002,30 +1006,18 @@ export class HomeAssistant extends Extension {
                         discoveryEntry.discovery_payload.state_open = "OPEN";
                         discoveryEntry.discovery_payload.state_closed = "CLOSE";
                         discoveryEntry.discovery_payload.state_stopped = stoppedState;
-                        // A movement value can remain stale after the cover reaches an endpoint. Prefer a terminal position when `state` agrees.
-                        const terminalPositionTemplate = positionProperty
-                            ? `{% if "${positionProperty}" in value_json and value_json["${positionProperty}"] == 0 and "${stateProperty}" in value_json and value_json["${stateProperty}"] == "CLOSE" %}` +
-                              "CLOSE" +
-                              `{% elif "${positionProperty}" in value_json and value_json["${positionProperty}"] == 100 and "${stateProperty}" in value_json and value_json["${stateProperty}"] == "OPEN" %}` +
-                              "OPEN"
-                            : "";
+                        const positionValue = positionProperty ? `value_json["${positionProperty}"] | default(none)` : "none";
                         discoveryEntry.discovery_payload.value_template =
-                            terminalPositionTemplate +
-                            `${positionProperty ? "{% elif" : "{% if"} "${motorStateProperty}" in value_json and value_json["${motorStateProperty}"] == "${openingState}" %}` +
-                            `${openingState}` +
-                            `{% elif "${motorStateProperty}" in value_json and value_json["${motorStateProperty}"] == "${closingState}" %}` +
-                            `${closingState}` +
-                            (positionProperty
-                                ? `{% elif "${motorStateProperty}" in value_json and value_json["${motorStateProperty}"] == "${stoppedState}" and "${positionProperty}" in value_json %}` +
-                                  `{% if value_json["${positionProperty}"] == 0 %}CLOSE{% else %}OPEN{% endif %}`
-                                : "") +
-                            `{% elif "${stateProperty}" in value_json and value_json["${stateProperty}"] == "OPEN" %}` +
-                            "OPEN" +
-                            `{% elif "${stateProperty}" in value_json and value_json["${stateProperty}"] == "CLOSE" %}` +
-                            "CLOSE" +
-                            "{% else %}" +
-                            `${stoppedState}` +
-                            "{% endif %}";
+                            `{% set motor = value_json["${motorStateProperty}"] | default(none) %}` +
+                            `{% set position = ${positionValue} %}` +
+                            `{% set state = value_json["${stateProperty}"] | default(none) %}` +
+                            `{% if (motor == "${openingState}" and position != 100) or (motor == "${closingState}" and position != 0) %}` +
+                            "{{ motor }}" +
+                            "{% elif position == 0 %}CLOSE" +
+                            "{% elif position == 100 %}OPEN" +
+                            `{% elif motor == "${stoppedState}" and position is not none %}OPEN` +
+                            '{% elif state in ["OPEN", "CLOSE"] %}{{ state }}' +
+                            `{% else %}${stoppedState}{% endif %}`;
                     }
                 }
 
@@ -1219,7 +1211,7 @@ export class HomeAssistant extends Extension {
                             command_topic_postfix: firstExpose.property,
                             ...(firstExpose.unit && {unit_of_measurement: firstExpose.unit}),
                             ...(firstExpose.value_step && {step: firstExpose.value_step}),
-                            ...NUMERIC_DISCOVERY_LOOKUP[firstExpose.name],
+                            ...NUMERIC_DISCOVERY_LOOKUP[cleanName(firstExpose.name)],
                         },
                     };
 
@@ -1251,7 +1243,7 @@ export class HomeAssistant extends Extension {
                     Object.assign(extraAttrs, {device_class: "power", state_class: "measurement"});
                 }
 
-                let key = firstExpose.name;
+                let key = cleanName(firstExpose.name);
 
                 // Home Assistant uses a different voc device_class for µg/m³ versus ppb or ppm.
                 if (firstExpose.name === "voc" && firstExpose.unit && ["ppb", "ppm"].includes(firstExpose.unit)) {
@@ -1499,12 +1491,11 @@ export class HomeAssistant extends Extension {
             }
 
             // Let Home Assistant generate entity name when device_class is present.
-            // preserve_name allows device_class and explicit name to coexist (e.g. derived sensors).
-            if (
-                entry.discovery_payload.device_class &&
-                entry.discovery_payload.name !== null &&
-                !NUMERIC_DISCOVERY_LOOKUP[firstExpose.name]?.preserve_name
-            ) {
+            // homeassistant.name allows device_class and explicit name to coexist (e.g. derived sensors).
+            // If name = null Home Assistant will use the device name as entity name.
+            // This is intentionally an undefined-only check to distinguish it from an null value.
+
+            if (entry.discovery_payload.device_class && firstExpose.homeassistant?.name === undefined) {
                 delete entry.discovery_payload.name;
             }
 
@@ -2157,11 +2148,13 @@ export class HomeAssistant extends Extension {
             sw_version: `Zigbee2MQTT ${this.zigbee2MQTTVersion}`,
         };
 
-        const url = settings.get().frontend?.url ?? "";
+        const instance = getInstanceContext();
+        const url = instance?.frontendUrl ?? settings.get().frontend?.url ?? "";
         // Since zigbee2mqtt-windfront support multiple instances the configuration URL contains the
-        // instance ID. Since we don't know which instance it is we always point to 0.
+        // instance ID. In multi-coordinator mode this is the index of the instance in the combined frontend,
+        // otherwise we don't know which instance it is and always point to 0.
         // https://github.com/Koenkk/zigbee2mqtt/issues/28936
-        const urlEntityPostfix = settings.get().frontend.package === "zigbee2mqtt-windfront" ? "0/" : "";
+        const urlEntityPostfix = instance ? `${instance.index}/` : settings.get().frontend.package === "zigbee2mqtt-windfront" ? "0/" : "";
         if (entity.isDevice()) {
             assert(entity.definition, `Cannot 'getDevicePayload' for unsupported device`);
             payload.model = entity.definition.description;

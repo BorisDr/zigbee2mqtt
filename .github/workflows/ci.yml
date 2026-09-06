@@ -65,7 +65,7 @@ jobs:
               if: (github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/')) && github.event_name == 'push'
               uses: docker/login-action@v4
               with:
-                  username: koenkk
+                  username: borisdr
                   password: ${{ secrets.DOCKER_KEY }}
 
             - name: Log in to the GitHub container registry
@@ -73,7 +73,7 @@ jobs:
               uses: docker/login-action@v4
               with:
                   registry: ghcr.io
-                  username: koenkk
+                  username: BorisDr
                   password: ${{ secrets.GH_TOKEN }}
 
             - name: Docker setup - QEMU
@@ -96,7 +96,7 @@ jobs:
                   context: .
                   file: docker/Dockerfile
                   platforms: linux/arm64/v8,linux/amd64,linux/arm/v6,linux/arm/v7,linux/riscv64,linux/386
-                  tags: koenkk/zigbee2mqtt:latest-dev,ghcr.io/koenkk/zigbee2mqtt:latest-dev
+                  tags: borisdr/zigbee2mqtt:latest-dev,ghcr.io/borisdr/zigbee2mqtt:latest-dev
                   push: true
                   build-args: |
                       COMMIT=${{ github.sha }}
@@ -130,8 +130,8 @@ jobs:
               id: meta
               with:
                   images: |
-                      koenkk/zigbee2mqtt
-                      ghcr.io/koenkk/zigbee2mqtt
+                      borisdr/zigbee2mqtt
+                      ghcr.io/borisdr/zigbee2mqtt
                   tags: |
                       type=semver,pattern={{version}}
                       type=semver,pattern={{major}}.{{minor}}
@@ -158,17 +158,18 @@ jobs:
                   NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN }}
                   NPM_CONFIG_PROVENANCE: true
 
-            - name: 'dev: Trigger zigbee2mqtt/hassio-zigbee2mqtt build'
-              if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+            # the edge add-on is built from `master` of this fork
+            - name: 'master: Trigger BorisDr/hassio-zigbee2mqtt edge build'
+              if: github.ref == 'refs/heads/master' && github.event_name == 'push'
               run: |
                   curl \
                     -X POST \
                     -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
                     -H "Accept: application/vnd.github.v3+json" \
-                    https://api.github.com/repos/zigbee2mqtt/hassio-zigbee2mqtt/actions/workflows/ci.yml/dispatches \
+                    https://api.github.com/repos/BorisDr/hassio-zigbee2mqtt/actions/workflows/ci.yml/dispatches \
                     -d '{"ref":"master","inputs":{}}'
 
-            - name: 'release: Trigger zigbee2mqtt/hassio-zigbee2mqtt build'
+            - name: 'release: Trigger BorisDr/hassio-zigbee2mqtt build'
               if: startsWith(github.ref, 'refs/tags/') && github.event_name == 'push'
               run: |
                   TAG=${GITHUB_REF#refs/*/}
@@ -178,7 +179,7 @@ jobs:
                     -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
                     -H "Accept: application/vnd.github.everest-preview+json" \
                     -H "Content-Type: application/json" \
-                    https://api.github.com/repos/zigbee2mqtt/hassio-zigbee2mqtt/dispatches \
+                    https://api.github.com/repos/BorisDr/hassio-zigbee2mqtt/dispatches \
                     --data "{\"event_type\": \"release\", \"client_payload\": { \"version\": \"$TAG-1\"}}"
 
             - name: 'release: Trigger zigbee2mqtt-chart image update'

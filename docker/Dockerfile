@@ -33,16 +33,16 @@ ARG VERSION
 LABEL org.opencontainers.image.authors="Koen Kanters"
 LABEL org.opencontainers.image.title="Zigbee2MQTT"
 LABEL org.opencontainers.image.description="Zigbee to MQTT bridge using Zigbee-herdsman"
-LABEL org.opencontainers.image.url="https://github.com/Koenkk/zigbee2mqtt"
+LABEL org.opencontainers.image.url="https://github.com/BorisDr/zigbee2mqtt"
 LABEL org.opencontainers.image.documentation="https://www.zigbee2mqtt.io/"
-LABEL org.opencontainers.image.source="https://github.com/Koenkk/zigbee2mqtt"
+LABEL org.opencontainers.image.source="https://github.com/BorisDr/zigbee2mqtt"
 LABEL org.opencontainers.image.licenses="GPL-3.0"
 LABEL org.opencontainers.image.created=${DATE}
 LABEL org.opencontainers.image.version=${VERSION}
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY dist ./dist
-COPY package.json LICENSE index.js data/configuration.example.yaml ./
+COPY package.json LICENSE index.js data/configuration.example.yaml data/instances.example.yaml ./
 
 COPY docker/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

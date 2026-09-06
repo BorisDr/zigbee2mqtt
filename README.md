@@ -1,27 +1,27 @@
 <div align="center">
-    <a href="https://github.com/koenkk/zigbee2mqtt">
+    <a href="https://github.com/BorisDr/zigbee2mqtt">
         <img width="150" height="150" src="images/logo.png">
     </a>
     <br>
     <br>
     <div style="display: flex;">
-        <a href="https://github.com/Koenkk/zigbee2mqtt/releases">
-            <img src="https://img.shields.io/github/release/koenkk/zigbee2mqtt.svg">
+        <a href="https://github.com/BorisDr/zigbee2mqtt/releases">
+            <img src="https://img.shields.io/github/release/BorisDr/zigbee2mqtt.svg">
         </a>
         <a href="https://www.npmjs.com/package/zigbee2mqtt">
             <img src="https://img.shields.io/npm/v/zigbee2mqtt">
         </a>
-        <a href="https://github.com/Koenkk/zigbee2mqtt/actions/workflows/ci.yml">
-            <img src="https://github.com/Koenkk/zigbee2mqtt/actions/workflows/ci.yml/badge.svg">
+        <a href="https://github.com/BorisDr/zigbee2mqtt/actions/workflows/ci.yml">
+            <img src="https://github.com/BorisDr/zigbee2mqtt/actions/workflows/ci.yml/badge.svg">
         </a>
-        <a href="https://github.com/Koenkk/zigbee2mqtt/actions/workflows/github-code-scanning/codeql">
-            <img src="https://github.com/Koenkk/zigbee2mqtt/actions/workflows/github-code-scanning/codeql/badge.svg">
+        <a href="https://github.com/BorisDr/zigbee2mqtt/actions/workflows/github-code-scanning/codeql">
+            <img src="https://github.com/BorisDr/zigbee2mqtt/actions/workflows/github-code-scanning/codeql/badge.svg">
         </a>
         <a href="https://discord.gg/dadfWYE">
             <img src="https://img.shields.io/discord/556563650429583360.svg">
         </a>
-        <a href="https://github.com/Koenkk/zigbee2mqtt/stargazers">
-            <img src="https://img.shields.io/github/stars/koenkk/zigbee2mqtt.svg">
+        <a href="https://github.com/BorisDr/zigbee2mqtt/stargazers">
+            <img src="https://img.shields.io/github/stars/BorisDr/zigbee2mqtt.svg">
         </a>
         <a href="https://www.paypal.me/koenkk">
             <img src="https://img.shields.io/badge/donate-PayPal-blue.svg">
@@ -52,7 +52,7 @@ Zigbee2MQTT integrates well with (almost) every home automation solution because
 
 <br clear="right">
 
-[Home Assistant OS](https://www.home-assistant.io/installation/) using [the official addon](https://github.com/zigbee2mqtt/hassio-zigbee2mqtt) ([other installations](https://www.zigbee2mqtt.io/guide/usage/integrations/home_assistant.html))
+[Home Assistant OS](https://www.home-assistant.io/installation/) using [the official addon](https://github.com/BorisDr/hassio-zigbee2mqtt) ([other installations](https://www.zigbee2mqtt.io/guide/usage/integrations/home_assistant.html))
 
 <br clear="both">
 
@@ -104,6 +104,16 @@ Integration implemented in ioBroker ([documentation](https://github.com/o0shojo0
 
 Zigbee2MQTT is made up of three modules, each developed in its own Github project. Starting from the hardware (adapter) and moving up; [zigbee-herdsman](https://github.com/koenkk/zigbee-herdsman) connects to your adapter to handle Zigbee communication and makes an API available to the higher levels of the stack. For e.g. Texas Instruments hardware, zigbee-herdsman uses the [TI zStack monitoring and test API](https://github.com/Koenkk/zigbee-herdsman/wiki/References#texas-instruments-zstack) to communicate with the adapter. The module [zigbee-herdsman-converters](https://github.com/koenkk/zigbee-herdsman-converters) handles the mapping from individual device models to the Zigbee clusters they support. [Zigbee clusters](https://github.com/Koenkk/zigbee-herdsman/wiki/References#csa-zigbee-alliance-spec) are the layers of the Zigbee protocol on top of the base protocol that define things like how lights, sensors and switches talk to each other over the Zigbee network. Finally, the Zigbee2MQTT module drives zigbee-herdsman and maps the zigbee messages to MQTT messages. Zigbee2MQTT also keeps track of the state of the system. It uses a `database.db` file to store this state; a text file with a JSON database of connected devices and their capabilities. Zigbee2MQTT provides several web-based interfaces ([zigbee2mqtt-frontend](https://github.com/nurikk/zigbee2mqtt-frontend), [zigbee2mqtt-windfront](https://github.com/Nerivec/zigbee2mqtt-windfront)) that allows monitoring and configuration.
 
+### Multiple coordinators
+
+This fork can drive several Zigbee coordinators from a single process. Each coordinator runs as an isolated instance (its own worker thread, data directory, `configuration.yaml`, `database.db`, `state.json`, logs and MQTT `base_topic`) and a single combined frontend shows all of them.
+
+1. Create one data directory per coordinator, each with its own `configuration.yaml` (e.g. by running Zigbee2MQTT once per directory in regular mode with `ZIGBEE2MQTT_DATA=<dir>`). Every instance needs a distinct `serial.port` and `mqtt.base_topic` (and `mqtt.client_id`, when set).
+2. Either create `instances.yaml` in your data directory (see [`data/instances.example.yaml`](data/instances.example.yaml)), or list the data directories in `ZIGBEE2MQTT_DATA` separated by `,` (or `:` on Linux/macOS, `;` on Windows), e.g. `ZIGBEE2MQTT_DATA=/data/living_room,/data/garage`. Instance names are then the directory names.
+3. Start Zigbee2MQTT as usual. The combined frontend is served on port 8080 by default (configurable in `instances.yaml`); each instance's API is reachable at `<base_url>/<instance name>/api`.
+
+Console log lines are prefixed with the instance name; file logs stay per instance in `<data_dir>/log`. When the watchdog is enabled (`Z2M_WATCHDOG`) a crashed instance is restarted on its own, otherwise the whole process exits so an external supervisor (systemd, Docker) can restart it. The onboarding wizard is not available in this mode: create the configuration files first.
+
 ### Developing
 
 Zigbee2MQTT uses TypeScript. Therefore after making changes to files in the `lib/` directory you need to recompile Zigbee2MQTT. This can be done by executing `pnpm run build`. For faster development instead of running `pnpm run build` you can run `pnpm run build:watch` in another terminal session, this will recompile as you change files.
@@ -119,4 +129,4 @@ If it's not listed in [Supported devices](https://www.zigbee2mqtt.io/supported-d
 
 ## Support & help
 
-If you need assistance you can check [opened issues](https://github.com/Koenkk/zigbee2mqtt/issues). Feel free to help with Pull Requests when you were able to fix things or add new devices or just share the love on social media.
+If you need assistance you can check [opened issues](https://github.com/BorisDr/zigbee2mqtt/issues). Feel free to help with Pull Requests when you were able to fix things or add new devices or just share the love on social media.

@@ -7,7 +7,7 @@ contact_links:
       url: https://www.zigbee2mqtt.io/advanced/more/switch-to-dev-branch.html
       about: If the development branch solves an issue you are facing, click here to see the instructions to switch to the development branch.
     - name: Questions/discussions
-      url: https://github.com/Koenkk/zigbee2mqtt/discussions/new
+      url: https://github.com/BorisDr/zigbee2mqtt/discussions/new
       about: Ask questions, discuss devices, show things you made...
     - name: Original frontend issues
       url: https://github.com/nurikk/zigbee2mqtt-frontend/issues
@@ -16,7 +16,7 @@ contact_links:
       url: https://github.com/Nerivec/zigbee2mqtt-windfront/issues
       about: Issues with the frontend package zigbee2mqtt-windfront
     - name: Home Assistant addon issues
-      url: https://github.com/zigbee2mqtt/hassio-zigbee2mqtt/issues
+      url: https://github.com/BorisDr/hassio-zigbee2mqtt/issues
       about: Issues with the Home Assistant addon
     - name: FAQ
       url: https://www.zigbee2mqtt.io/guide/faq

@@ -383,4 +383,4 @@ To load external extensions:
 - Main documentation: https://www.zigbee2mqtt.io/
 - Contributing guide: `CONTRIBUTING.md`
 - Coding standards: `.github/copilot-instructions.md`
-- Issue tracker: https://github.com/Koenkk/zigbee2mqtt/issues
+- Issue tracker: https://github.com/BorisDr/zigbee2mqtt/issues

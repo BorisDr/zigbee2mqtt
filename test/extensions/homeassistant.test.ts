@@ -18,6 +18,7 @@ import HomeAssistant from "../../lib/extension/homeassistant";
 
 import type Device from "../../lib/model/device";
 import type Group from "../../lib/model/group";
+import {setInstanceContext} from "../../lib/util/instanceContext";
 import * as settings from "../../lib/util/settings";
 
 const mocksClear = [mockMQTTPublishAsync, mockLogger.debug, mockLogger.warning, mockLogger.error];
@@ -1368,6 +1369,77 @@ describe("Extension: HomeAssistant", () => {
         });
     });
 
+    it("Should discover analog input on unsupported devices with device class and name", () => {
+        const payload = {
+            availability: [
+                {
+                    topic: "zigbee2mqtt/bridge/state",
+                    value_template: "{{ value_json.state }}",
+                },
+            ],
+            default_entity_id: "sensor.0x0017880104e45518_analog_in_temperature_1",
+            device: {
+                identifiers: ["zigbee2mqtt_0x0017880104e45518"],
+                manufacturer: "notSupportedMfg",
+                model: "Automatically generated definition",
+                model_id: "notSupportedModelID",
+                name: "0x0017880104e45518",
+                via_device: "zigbee2mqtt_bridge_0x00124b00120144ae",
+            },
+            device_class: "temperature",
+            enabled_by_default: true,
+            name: "my_sensor_name",
+            object_id: "0x0017880104e45518_analog_in_temperature_1",
+            origin: origin,
+            state_class: "measurement",
+            state_topic: "zigbee2mqtt/0x0017880104e45518",
+            unique_id: "0x0017880104e45518_analog_in_temperature_1_zigbee2mqtt",
+            unit_of_measurement: "°C",
+            value_template: '{{ value_json["analog_in_temperature_1"] }}',
+        };
+
+        expect(mockMQTTPublishAsync).toHaveBeenCalledWith(
+            "homeassistant/sensor/0x0017880104e45518/analog_in_temperature_1/config",
+            stringify(payload),
+            {
+                retain: true,
+                qos: 1,
+            },
+        );
+    });
+
+    it("Should discover analog output on unsupported devices", () => {
+        const payload = {
+            availability: [
+                {
+                    topic: "zigbee2mqtt/bridge/state",
+                    value_template: "{{ value_json.state }}",
+                },
+            ],
+            command_topic: "zigbee2mqtt/0x0017880104e45518/2/set/analog_output_2",
+            default_entity_id: "number.0x0017880104e45518_analog_output_2",
+            device: {
+                identifiers: ["zigbee2mqtt_0x0017880104e45518"],
+                manufacturer: "notSupportedMfg",
+                model: "Automatically generated definition",
+                model_id: "notSupportedModelID",
+                name: "0x0017880104e45518",
+                via_device: "zigbee2mqtt_bridge_0x00124b00120144ae",
+            },
+            name: "my_number_name",
+            object_id: "0x0017880104e45518_analog_output_2",
+            origin: origin,
+            state_topic: "zigbee2mqtt/0x0017880104e45518",
+            unique_id: "0x0017880104e45518_analog_output_2_zigbee2mqtt",
+            value_template: '{{ value_json["analog_output_2"] }}',
+        };
+
+        expect(mockMQTTPublishAsync).toHaveBeenCalledWith("homeassistant/number/0x0017880104e45518/analog_output_2/config", stringify(payload), {
+            qos: 1,
+            retain: true,
+        });
+    });
+
     it("Should apply user configuration after converter compatibility mapping", async () => {
         settings.set(["devices", "0x18fc2600000d7ae2", "homeassistant", "climate"], {
             modes: ["off", "heat", "auto"],
@@ -1645,6 +1717,8 @@ describe("Extension: HomeAssistant", () => {
     });
 
     it("Should discover dual cover devices", () => {
+        const coverValueTemplate =
+            '{% set motor = value_json["moving"] | default(none) %}{% set position = value_json["position"] | default(none) %}{% set state = value_json["state"] | default(none) %}{% if (motor == "UP" and position != 100) or (motor == "DOWN" and position != 0) %}{{ motor }}{% elif position == 0 %}CLOSE{% elif position == 100 %}OPEN{% elif motor == "STOP" and position is not none %}OPEN{% elif state in ["OPEN", "CLOSE"] %}{{ state }}{% else %}STOP{% endif %}';
         const payload_left = {
             availability: [
                 {
@@ -1676,8 +1750,7 @@ describe("Extension: HomeAssistant", () => {
             state_stopped: "STOP",
             state_topic: "zigbee2mqtt/0xa4c138018cf95021/left",
             unique_id: "0xa4c138018cf95021_cover_left_zigbee2mqtt",
-            value_template:
-                '{% if "position" in value_json and value_json["position"] == 0 and "state" in value_json and value_json["state"] == "CLOSE" %}CLOSE{% elif "position" in value_json and value_json["position"] == 100 and "state" in value_json and value_json["state"] == "OPEN" %}OPEN{% elif "moving" in value_json and value_json["moving"] == "UP" %}UP{% elif "moving" in value_json and value_json["moving"] == "DOWN" %}DOWN{% elif "moving" in value_json and value_json["moving"] == "STOP" and "position" in value_json %}{% if value_json["position"] == 0 %}CLOSE{% else %}OPEN{% endif %}{% elif "state" in value_json and value_json["state"] == "OPEN" %}OPEN{% elif "state" in value_json and value_json["state"] == "CLOSE" %}CLOSE{% else %}STOP{% endif %}',
+            value_template: coverValueTemplate,
         };
         const payload_right = {
             availability: [
@@ -1710,8 +1783,7 @@ describe("Extension: HomeAssistant", () => {
             state_stopped: "STOP",
             state_topic: "zigbee2mqtt/0xa4c138018cf95021/right",
             unique_id: "0xa4c138018cf95021_cover_right_zigbee2mqtt",
-            value_template:
-                '{% if "position" in value_json and value_json["position"] == 0 and "state" in value_json and value_json["state"] == "CLOSE" %}CLOSE{% elif "position" in value_json and value_json["position"] == 100 and "state" in value_json and value_json["state"] == "OPEN" %}OPEN{% elif "moving" in value_json and value_json["moving"] == "UP" %}UP{% elif "moving" in value_json and value_json["moving"] == "DOWN" %}DOWN{% elif "moving" in value_json and value_json["moving"] == "STOP" and "position" in value_json %}{% if value_json["position"] == 0 %}CLOSE{% else %}OPEN{% endif %}{% elif "state" in value_json and value_json["state"] == "OPEN" %}OPEN{% elif "state" in value_json and value_json["state"] == "CLOSE" %}CLOSE{% else %}STOP{% endif %}',
+            value_template: coverValueTemplate,
         };
 
         const coverLeftCalls = mockMQTTPublishAsync.mock.calls.filter(
@@ -1732,7 +1804,7 @@ describe("Extension: HomeAssistant", () => {
         });
     });
 
-    it("Should derive stopped cover state from position for motor_state covers", () => {
+    it("Should derive direction-aware cover state from position for motor_state covers", () => {
         const coverExpose = new zhc.Cover().withPosition();
         const motorStateExpose = new zhc.Enum("motor_state", zhc.access.STATE, ["opening", "closing", "stopped"]);
         const device = {
@@ -1756,7 +1828,7 @@ describe("Extension: HomeAssistant", () => {
             state_closed: "CLOSE",
             state_stopped: "stopped",
             value_template:
-                '{% if "position" in value_json and value_json["position"] == 0 and "state" in value_json and value_json["state"] == "CLOSE" %}CLOSE{% elif "position" in value_json and value_json["position"] == 100 and "state" in value_json and value_json["state"] == "OPEN" %}OPEN{% elif "motor_state" in value_json and value_json["motor_state"] == "opening" %}opening{% elif "motor_state" in value_json and value_json["motor_state"] == "closing" %}closing{% elif "motor_state" in value_json and value_json["motor_state"] == "stopped" and "position" in value_json %}{% if value_json["position"] == 0 %}CLOSE{% else %}OPEN{% endif %}{% elif "state" in value_json and value_json["state"] == "OPEN" %}OPEN{% elif "state" in value_json and value_json["state"] == "CLOSE" %}CLOSE{% else %}stopped{% endif %}',
+                '{% set motor = value_json["motor_state"] | default(none) %}{% set position = value_json["position"] | default(none) %}{% set state = value_json["state"] | default(none) %}{% if (motor == "opening" and position != 100) or (motor == "closing" and position != 0) %}{{ motor }}{% elif position == 0 %}CLOSE{% elif position == 100 %}OPEN{% elif motor == "stopped" and position is not none %}OPEN{% elif state in ["OPEN", "CLOSE"] %}{{ state }}{% else %}stopped{% endif %}',
         });
     });
 
@@ -1784,7 +1856,7 @@ describe("Extension: HomeAssistant", () => {
             state_closed: "CLOSE",
             state_stopped: "stopped",
             value_template:
-                '{% if "motor_state" in value_json and value_json["motor_state"] == "opening" %}opening{% elif "motor_state" in value_json and value_json["motor_state"] == "closing" %}closing{% elif "state" in value_json and value_json["state"] == "OPEN" %}OPEN{% elif "state" in value_json and value_json["state"] == "CLOSE" %}CLOSE{% else %}stopped{% endif %}',
+                '{% set motor = value_json["motor_state"] | default(none) %}{% set position = none %}{% set state = value_json["state"] | default(none) %}{% if (motor == "opening" and position != 100) or (motor == "closing" and position != 0) %}{{ motor }}{% elif position == 0 %}CLOSE{% elif position == 100 %}OPEN{% elif motor == "stopped" and position is not none %}OPEN{% elif state in ["OPEN", "CLOSE"] %}{{ state }}{% else %}stopped{% endif %}',
         });
     });
 
@@ -3004,6 +3076,32 @@ describe("Extension: HomeAssistant", () => {
             qos: 1,
         });
     });
+
+    it.each([
+        // In multi-coordinator mode the URL of the combined frontend and the index of the instance are used.
+        ["http://combined.frontend", "http://combined.frontend/#/device/2/0x0017880104e45522/info"],
+        [undefined, "http://zigbee.mqtt/#/device/2/0x0017880104e45522/info"],
+    ])(
+        "Should discover devices with configuration url of the combined frontend (%s)",
+        async (frontendUrl: string | undefined, expectedUrl: string) => {
+            settings.set(["frontend", "url"], "http://zigbee.mqtt");
+            setInstanceContext({name: "garage", index: 2, frontendUrl});
+
+            try {
+                await resetExtension();
+                await flushPromises();
+            } finally {
+                setInstanceContext(undefined);
+            }
+
+            const discovered = mockMQTTPublishAsync.mock.calls.find(
+                ([topic]) => topic === "homeassistant/sensor/0x0017880104e45522/temperature/config",
+            );
+
+            expect(discovered).toBeDefined();
+            expect(JSON.parse(discovered?.[1] as string).device.configuration_url).toStrictEqual(expectedUrl);
+        },
+    );
 
     it.each([
         // Windfront includes the instance ID in the URL.

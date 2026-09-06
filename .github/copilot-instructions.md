@@ -453,7 +453,7 @@ this.eventBus.on('deviceMessage', this.onDeviceMessage, this);
 
 ## Resources
 
-- Repository: https://github.com/Koenkk/zigbee2mqtt
+- Repository: https://github.com/BorisDr/zigbee2mqtt
 - Documentation: https://koenkk.github.io/zigbee2mqtt
 - License: GPL-3.0
-- Issue Tracker: https://github.com/Koenkk/zigbee2mqtt/issues
+- Issue Tracker: https://github.com/BorisDr/zigbee2mqtt/issues
