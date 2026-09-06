@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.15.0](https://github.com/BorisDr/zigbee2mqtt/compare/2.14.1...2.15.0) (2026-09-06)
+
+
+### Features
+
+* run multi coordinator ([8ec365e](https://github.com/BorisDr/zigbee2mqtt/commit/8ec365e1fe33533999771afc4a9dd5486f15b670))
+* run multi coordinator ([30a9d48](https://github.com/BorisDr/zigbee2mqtt/commit/30a9d48166a237cce5c88a586a90bf7703c2ff59))
+
+
+### Bug Fixes
+
+* Home Assistant: fix cover state reporting when moving from fully opened/closed state ([#33037](https://github.com/BorisDr/zigbee2mqtt/issues/33037)) ([74d97f1](https://github.com/BorisDr/zigbee2mqtt/commit/74d97f152973e35c88c5cdde142c63435188a61f))
+* **ignore:** update zigbee-herdsman to 10.9.3 ([#33039](https://github.com/BorisDr/zigbee2mqtt/issues/33039)) ([81e8ebb](https://github.com/BorisDr/zigbee2mqtt/commit/81e8ebbc3cc3f7364ade8524f58648102366891f))
+* **ignore:** update zigbee-herdsman-converters to 26.106.0 ([#33040](https://github.com/BorisDr/zigbee2mqtt/issues/33040)) ([ac09881](https://github.com/BorisDr/zigbee2mqtt/commit/ac098810a1b72a13c1f4f62f2511f4531ba40d4e))
+* Preserve HA name if set in withHomeassistant and remove analog prefix ([#32654](https://github.com/BorisDr/zigbee2mqtt/issues/32654)) ([bba9c02](https://github.com/BorisDr/zigbee2mqtt/commit/bba9c027c56d97bb5f1fd1585354dbcd626ea400))
+
 ## [2.14.1](https://github.com/Koenkk/zigbee2mqtt/compare/2.14.0...2.14.1) (2026-09-03)
 
 
